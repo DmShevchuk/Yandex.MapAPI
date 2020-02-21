@@ -1,15 +1,108 @@
 import pygame
 import requests
 import os
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow
+import sys
+
+
+class Ui_Form(object):
+    def setupUi(self, Form):
+        Form.setObjectName("Form")
+        Form.resize(688, 183)
+        self.lineEdit = QtWidgets.QLineEdit(Form)
+        self.lineEdit.setGeometry(QtCore.QRect(30, 10, 520, 31))
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        self.lineEdit.setFont(font)
+        self.lineEdit.setText("")
+        self.lineEdit.setObjectName("lineEdit")
+        self.pushButton = QtWidgets.QPushButton(Form)
+        self.pushButton.setGeometry(QtCore.QRect(550, 8, 121, 34))
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        self.pushButton.setFont(font)
+        self.pushButton.setObjectName("pushButton")
+        self.pushButton_2 = QtWidgets.QPushButton(Form)
+        self.pushButton_2.setGeometry(QtCore.QRect(550, 140, 121, 31))
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        self.pushButton_2.setFont(font)
+        self.pushButton_2.setObjectName("pushButton_2")
+        self.lineEdit2 = QtWidgets.QLineEdit(Form)
+        self.lineEdit2.setGeometry(QtCore.QRect(30, 100, 650, 31))
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        self.lineEdit2.setFont(font)
+        self.lineEdit2.setText("")
+        self.lineEdit2.setObjectName("lineEdit")
+        self.comboBox = QtWidgets.QComboBox(Form)
+        self.comboBox.setGeometry(QtCore.QRect(30, 50, 301, 31))
+        font = QtGui.QFont()
+        font.setPointSize(13)
+        self.comboBox.setFont(font)
+        self.comboBox.setObjectName("comboBox")
+        self.comboBox.addItem("")
+        self.comboBox.addItem("")
+
+        self.retranslateUi(Form)
+        QtCore.QMetaObject.connectSlotsByName(Form)
+
+    def retranslateUi(self, Form):
+        _translate = QtCore.QCoreApplication.translate
+        Form.setWindowTitle(_translate("Form", "Form"))
+        self.pushButton.setText(_translate("Form", "Искать"))
+        self.pushButton_2.setText(_translate("Form", "Сброс"))
+        self.comboBox.setItemText(0, _translate("Form", "Без почтового индекса"))
+        self.comboBox.setItemText(1, _translate("Form", "С почтовым индексом"))
+
+
+class MyWidget(QWidget, Ui_Form):
+    def __init__(self):
+        super().__init__()
+        self.setupUi(self)
+        self.pushButton.clicked.connect(self.search)
+        self.pushButton_2.clicked.connect(self.clean)
+
+    def search(self):
+        global longitude, lattitude, pt, pt_coord
+        address = self.lineEdit.text()
+        request = 'https://geocode-maps.yandex.ru/1.x/?format=json' \
+            f'&apikey=40d1649f-0493-4b70-98ba-98533de7710b&geocode={address}&results=1'
+        response = requests.get(request)
+        try:
+            json_response = response.json()
+            self.lineEdit2.setText(json_response['response']['GeoObjectCollection']
+                                   ['featureMember'][0]['GeoObject']['metaDataProperty']
+                                   ['GeocoderMetaData']['AddressDetails']['Country']['AddressLine'])
+
+            position = json_response['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['Point']['pos']
+            longitude = float(position.split()[0])
+            lattitude = float(position.split()[1])
+            pt = True
+            pt_coord = longitude, lattitude
+
+        except Exception:
+            self.lineEdit2.setText('Что-то пошло не так(')
+
+    def clean(self):
+        global pt
+        self.lineEdit.setText('')
+        self.lineEdit2.setText('')
+        self.comboBox.setCurrentIndex(0)
+        pt = False
+
 
 map_request = 'http://static-maps.yandex.ru/1.x/'
 
-longitude = '31.268856'
-lattitude = '58.523656'
+longitude = 31.268856
+lattitude = 58.523656
 delta = 0.002
 type_map = 'map'
+pt = False
+pt_coord = ''
 map_params = {
-    'll': ','.join([longitude, lattitude]),
+    'll': ','.join([str(longitude), str(lattitude)]),
     "spn": ",".join([str(delta), str(delta)]),
     "l": type_map
 }
@@ -17,10 +110,12 @@ map_params = {
 
 def map():
     map_params = {
-        'll': ','.join([longitude, lattitude]),
+        'll': ','.join([str(longitude), str(lattitude)]),
         "spn": ",".join([str(delta), str(delta)]),
-        "l": type_map
+        "l": type_map,
+        'pt': ','.join([str(pt_coord[0]), str(pt_coord[1])]) if pt else '',
     }
+
     response = requests.get(map_request, params=map_params)
     map = 'map.png'
     with open(map, 'wb') as photo:
@@ -49,6 +144,10 @@ pygame.draw.rect(screen, (0, 0, 0), (5, 5, 150, 30), 1)
 text = font.render('Поиск', 1, (0, 0, 0))
 text_x, text_y = 57, 14
 screen.blit(text, (text_x, text_y))
+
+app = QApplication(sys.argv)
+ex = MyWidget()
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -56,16 +155,33 @@ while running:
             running = False
         if event.type == pygame.KEYDOWN:
             if event.key == 265:
-                if delta >= 0.012:
+                if delta * 2 <= 66:
                     delta *= 2
-                else:
-                    delta += 0.005
             if event.key == 259:
-                if delta > 0.112:
-                    delta -= 0.1
+                if delta / 2 >= 0.0005:
+                    delta /= 2
+
+            if event.key == pygame.K_UP:
+                if lattitude + delta <= 83:
+                    lattitude += delta
+
+            if event.key == pygame.K_DOWN:
+                if lattitude - delta >= -83:
+                    lattitude -= delta
+
+            if event.key == pygame.K_RIGHT:
+                if longitude + delta > 180:
+                    longitude = -180
                 else:
-                    if delta - 0.005 > 0:
-                        delta -= 0.005
+                    longitude += delta
+
+            if event.key == pygame.K_LEFT:
+                if longitude - delta < -180:
+                    longitude = 180
+                else:
+                    longitude -= delta
+            map()
+
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 x, y = event.pos
@@ -76,6 +192,7 @@ while running:
                 if 540 <= x <= 590 and 0 <= y <= 35:
                     type_map = 'sat,skl'
                 if 5 <= x <= 155 and 5 <= y <= 35:
-                    pass
+                    ex.show()
+
     screen.blit(map(), (0, 40))
     pygame.display.flip()
